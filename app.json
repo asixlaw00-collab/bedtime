@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Bedtime Stories",
+    "slug": "bedtime-stories",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#1A1A2E"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bedtime.stories"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1A1A2E"
+      },
+      "package": "com.bedtime.stories"
+    },
+    "plugins": [
+      "expo-speech"
+    ]
+  }
+}
