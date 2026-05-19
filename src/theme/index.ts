@@ -20,6 +20,8 @@ export const Colors = {
   natureBg: '#E1F5FE',
   family: '#FF9800',
   familyBg: '#FFF3E0',
+  lifestyle: '#00ACC1',
+  lifestyleBg: '#E0F7FA',
 };
 
 export const categoryMeta: Record<string, { label: string; color: string; bg: string; emoji: string }> = {
@@ -29,6 +31,7 @@ export const categoryMeta: Record<string, { label: string; color: string; bg: st
   friendship: { label: 'Friendship', color: Colors.friendship, bg: Colors.friendshipBg, emoji: '💝' },
   nature:     { label: 'Nature',     color: Colors.nature,     bg: Colors.natureBg,     emoji: '🌿' },
   family:     { label: 'Family',     color: Colors.family,     bg: Colors.familyBg,     emoji: '🏡' },
+  lifestyle:  { label: 'Lifestyle',  color: Colors.lifestyle,  bg: Colors.lifestyleBg,  emoji: '⭐' },
 };
 
 export const Fonts = {

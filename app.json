@@ -19,8 +19,6 @@
       },
       "package": "com.bedtime.stories"
     },
-    "plugins": [
-      "expo-speech"
-    ]
+    "plugins": []
   }
 }

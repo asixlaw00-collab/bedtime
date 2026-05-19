@@ -1,19 +1,47 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, Alert, Modal, Dimensions,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  Alert, Modal, Dimensions, FlatList, NativeSyntheticEvent,
+  NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import * as Speech from 'expo-speech';
+
+// Pick the most magical-sounding voice available on the device
+async function getDisneyVoice(): Promise<string | undefined> {
+  try {
+    const voices = await Speech.getAvailableVoicesAsync();
+    const preferred = [
+      'com.apple.ttsbundle.Samantha-compact',
+      'com.apple.voice.compact.en-US.Samantha',
+      'com.apple.ttsbundle.siri_female_en-US_compact',
+      'com.apple.voice.compact.en-GB.Martha',
+      'com.apple.ttsbundle.Kate-compact',
+    ];
+    for (const id of preferred) {
+      if (voices.find((v) => v.identifier === id)) return id;
+    }
+    // fallback: first English female voice
+    const female = voices.find(
+      (v) => v.language.startsWith('en') && v.name.match(/female|samantha|kate|martha|victoria|karen/i)
+    );
+    return female?.identifier;
+  } catch {
+    return undefined;
+  }
+}
 import { getById } from '../data/stories';
 import { StoryIllustration } from '../components/StoryIllustration';
 import { useFavorites } from '../hooks/useFavorites';
 import { useSleepTimer, TIMER_OPTIONS } from '../hooks/useSleepTimer';
+import { useBackgroundMusic } from '../hooks/useBackgroundMusic';
 import { Colors, categoryMeta, Spacing } from '../theme';
 import { RootStackParamList } from '../navigation';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
+const PAGE_W = SW;
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Reader'>;
@@ -23,44 +51,61 @@ interface Props {
 export function StoryReaderScreen({ navigation, route }: Props) {
   const story = getById(route.params.storyId)!;
   const { isFav, toggle } = useFavorites();
-  const [page, setPage] = useState(0);
+  const [pageIdx, setPageIdx] = useState(0);
   const [speaking, setSpeaking] = useState(false);
   const [timerModal, setTimerModal] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const [voice, setVoice] = useState<string | undefined>();
 
+  useEffect(() => {
+    getDisneyVoice().then(setVoice);
+  }, []);
+  const flatRef = useRef<FlatList>(null);
   const meta = categoryMeta[story.category];
+  const currentPage = story.pages[pageIdx];
+  const ILLUS_H = SH * 0.56;
+
+  useBackgroundMusic(true);
 
   const onTimerExpire = useCallback(() => {
     Speech.stop();
     setSpeaking(false);
-    Alert.alert('Sleep time! 😴', 'Sweet dreams, little one!');
+    Alert.alert('Sleep time 😴', 'Sweet dreams, little one!');
   }, []);
 
   const timer = useSleepTimer(onTimerExpire);
 
-  const toggleSpeech = useCallback(async () => {
+  const toggleSpeech = useCallback(() => {
     if (speaking) {
-      await Speech.stop();
+      Speech.stop();
       setSpeaking(false);
     } else {
-      const text = story.pages.slice(page).join(' ');
       setSpeaking(true);
-      Speech.speak(text, {
-        rate: 0.82,
-        pitch: 1.0,
+      Speech.speak(currentPage.text, {
+        voice,
+        language: 'en-US',
+        rate: 0.72,       // slow & expressive like a Disney storyteller
+        pitch: 1.6,       // bright, warm, magical tone
         onDone: () => setSpeaking(false),
         onStopped: () => setSpeaking(false),
         onError: () => setSpeaking(false),
       });
     }
-  }, [speaking, story.pages, page]);
+  }, [speaking, currentPage]);
 
-  const goPage = (dir: 1 | -1) => {
+  const onScrollEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / PAGE_W);
+    if (idx !== pageIdx) {
+      Speech.stop();
+      setSpeaking(false);
+      setPageIdx(idx);
+    }
+  }, [pageIdx]);
+
+  const goTo = (idx: number) => {
     Speech.stop();
     setSpeaking(false);
-    const next = Math.max(0, Math.min(story.pages.length - 1, page + dir));
-    setPage(next);
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    flatRef.current?.scrollToIndex({ index: idx, animated: true });
+    setPageIdx(idx);
   };
 
   return (
@@ -68,95 +113,119 @@ export function StoryReaderScreen({ navigation, route }: Props) {
       {/* top bar */}
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => { Speech.stop(); navigation.goBack(); }} style={styles.iconBtn}>
-          <Text style={styles.iconText}>←</Text>
+          <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.catLabel} numberOfLines={1}>{meta.emoji} {meta.label}</Text>
+        <Text style={styles.titleTop} numberOfLines={1}>{story.title}</Text>
         <TouchableOpacity onPress={() => toggle(story.id)} style={styles.iconBtn}>
-          <Text style={[styles.iconText, { color: isFav(story.id) ? Colors.accent : Colors.textMuted }]}>
+          <Text style={[styles.heartText, { color: isFav(story.id) ? Colors.accent : Colors.textMuted }]}>
             {isFav(story.id) ? '♥' : '♡'}
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView ref={scrollRef} showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        {/* illustration */}
-        <StoryIllustration
-          emoji={story.emoji}
-          bgColor={story.bgColor}
-          accentColor={story.accentColor}
-          category={story.category}
-          width={SCREEN_W - Spacing.md * 2}
-          height={240}
-        />
+      {/* swipeable pages */}
+      <FlatList
+        ref={flatRef}
+        data={story.pages}
+        keyExtractor={(_, i) => String(i)}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={onScrollEnd}
+        renderItem={({ item, index }) => (
+          <View style={[styles.page, { width: PAGE_W }]}>
+            <StoryIllustration
+              emoji={item.emoji}
+              detailEmoji={item.detailEmoji}
+              scene={item.scene}
+              topColor={item.topColor}
+              bottomColor={item.bottomColor}
+              width={PAGE_W}
+              height={ILLUS_H}
+            />
+            <View style={styles.textArea}>
+              <Text style={styles.storyText}>{item.text}</Text>
 
-        {/* title */}
-        <Text style={styles.title}>{story.title}</Text>
+              {/* keyword strip on last page */}
+              {index === story.pages.length - 1 && story.keywords?.length > 0 && (
+                <View style={styles.keywordsBox}>
+                  <Text style={styles.keywordsTitle}>✨ Words I learned</Text>
+                  <View style={styles.keywordsRow}>
+                    {story.keywords.map((w) => (
+                      <View key={w} style={[styles.keywordChip, { borderColor: meta.color }]}>
+                        <Text style={[styles.keywordText, { color: meta.color }]}>{w}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+      />
 
-        {/* page indicator */}
+      {/* bottom controls */}
+      <View style={styles.bottom}>
+        {/* page dots */}
         <View style={styles.dots}>
           {story.pages.map((_, i) => (
-            <View key={i} style={[styles.dot, i === page && styles.dotActive, { backgroundColor: i === page ? meta.color : Colors.bgDeep }]} />
+            <TouchableOpacity key={i} onPress={() => goTo(i)}>
+              <View style={[
+                styles.dot,
+                { backgroundColor: i === pageIdx ? meta.color : Colors.bgDeep },
+                i === pageIdx && styles.dotActive,
+              ]} />
+            </TouchableOpacity>
           ))}
         </View>
 
-        {/* story text */}
-        <View style={styles.textCard}>
-          <Text style={styles.storyText}>{story.pages[page]}</Text>
-        </View>
-
-        {/* page nav */}
-        <View style={styles.pageNav}>
+        {/* controls row */}
+        <View style={styles.ctrlRow}>
+          {/* prev */}
           <TouchableOpacity
-            onPress={() => goPage(-1)}
-            disabled={page === 0}
-            style={[styles.pageBtn, page === 0 && styles.pageBtnDisabled]}
+            onPress={() => goTo(Math.max(0, pageIdx - 1))}
+            disabled={pageIdx === 0}
+            style={[styles.navBtn, pageIdx === 0 && styles.disabled]}
           >
-            <Text style={styles.pageBtnText}>‹ Prev</Text>
+            <Text style={styles.navText}>‹</Text>
           </TouchableOpacity>
 
-          <Text style={styles.pageCount}>{page + 1} / {story.pages.length}</Text>
-
+          {/* read aloud */}
           <TouchableOpacity
-            onPress={() => goPage(1)}
-            disabled={page === story.pages.length - 1}
-            style={[styles.pageBtn, page === story.pages.length - 1 && styles.pageBtnDisabled]}
+            onPress={toggleSpeech}
+            style={[styles.readBtn, { backgroundColor: meta.color }]}
           >
-            <Text style={styles.pageBtnText}>Next ›</Text>
+            <Text style={styles.readBtnText}>{speaking ? '⏸  Pause' : '▶  Read'}</Text>
+          </TouchableOpacity>
+
+          {/* sleep timer */}
+          <TouchableOpacity
+            onPress={() => timer.active ? timer.cancel() : setTimerModal(true)}
+            style={styles.navBtn}
+          >
+            <Text style={styles.timerText}>{timer.display ?? '😴'}</Text>
+          </TouchableOpacity>
+
+          {/* next */}
+          <TouchableOpacity
+            onPress={() => goTo(Math.min(story.pages.length - 1, pageIdx + 1))}
+            disabled={pageIdx === story.pages.length - 1}
+            style={[styles.navBtn, pageIdx === story.pages.length - 1 && styles.disabled]}
+          >
+            <Text style={styles.navText}>›</Text>
           </TouchableOpacity>
         </View>
-      </ScrollView>
-
-      {/* bottom controls */}
-      <View style={styles.controls}>
-        {/* TTS */}
-        <TouchableOpacity onPress={toggleSpeech} style={[styles.ctrlBtn, { backgroundColor: meta.color + '33' }]}>
-          <Text style={styles.ctrlIcon}>{speaking ? '⏸' : '▶'}</Text>
-          <Text style={[styles.ctrlLabel, { color: meta.color }]}>{speaking ? 'Pause' : 'Read'}</Text>
-        </TouchableOpacity>
-
-        {/* Sleep timer */}
-        <TouchableOpacity
-          onPress={() => timer.active ? timer.cancel() : setTimerModal(true)}
-          style={[styles.ctrlBtn, { backgroundColor: Colors.bgCard }]}
-        >
-          <Text style={styles.ctrlIcon}>😴</Text>
-          <Text style={styles.ctrlLabel}>{timer.display ?? 'Sleep'}</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* timer picker modal */}
+      {/* sleep timer modal */}
       <Modal visible={timerModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Sleep Timer</Text>
-            <Text style={styles.modalSub}>Stop reading after…</Text>
-            {TIMER_OPTIONS.map((mins) => (
-              <TouchableOpacity
-                key={mins}
-                style={styles.timerOption}
-                onPress={() => { timer.start(mins); setTimerModal(false); }}
-              >
-                <Text style={styles.timerOptionText}>{mins} minutes</Text>
+        <View style={styles.overlay}>
+          <View style={styles.modal}>
+            <Text style={styles.modalTitle}>😴  Sleep Timer</Text>
+            <Text style={styles.modalSub}>Auto-stop reading after…</Text>
+            {TIMER_OPTIONS.map((m) => (
+              <TouchableOpacity key={m} style={styles.timerOpt} onPress={() => { timer.start(m); setTimerModal(false); }}>
+                <Text style={styles.timerOptText}>{m} minutes</Text>
               </TouchableOpacity>
             ))}
             <TouchableOpacity onPress={() => setTimerModal(false)} style={styles.cancelBtn}>
@@ -170,83 +239,95 @@ export function StoryReaderScreen({ navigation, route }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: Colors.bg },
+  safe: { flex: 1, backgroundColor: '#0B0E2E' },
 
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
+    paddingVertical: 6,
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    zIndex: 10,
   },
-  iconBtn: { padding: 10 },
-  iconText: { fontSize: 24, color: Colors.text },
-  catLabel: { flex: 1, textAlign: 'center', color: Colors.textSoft, fontSize: 14, fontWeight: '600' },
-
-  scroll: { padding: Spacing.md, paddingBottom: 16 },
-
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.text,
+  iconBtn: { padding: 8 },
+  backText: { fontSize: 26, color: '#FFF', textShadowColor: '#000', textShadowRadius: 4 },
+  heartText: { fontSize: 24, textShadowColor: '#000', textShadowRadius: 4 },
+  titleTop: {
+    flex: 1,
     textAlign: 'center',
-    marginTop: Spacing.md,
-    marginBottom: Spacing.sm,
-    lineHeight: 30,
+    color: '#FFF',
+    fontSize: 15,
+    fontWeight: '700',
+    textShadowColor: '#000',
+    textShadowRadius: 6,
   },
 
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: Spacing.md },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  dotActive: { width: 24 },
+  page: { flex: 1 },
 
-  textCard: {
+  textArea: {
+    flex: 1,
     backgroundColor: Colors.bgCard,
-    borderRadius: 18,
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.bgDeep,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   storyText: {
-    fontSize: 20,
-    lineHeight: 34,
+    fontSize: 18,
+    lineHeight: 28,
     color: Colors.text,
-    textAlign: 'left',
-    fontWeight: '400',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 
-  pageNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.sm,
-  },
-  pageBtn: { backgroundColor: Colors.bgCard, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 },
-  pageBtnDisabled: { opacity: 0.3 },
-  pageBtnText: { color: Colors.text, fontSize: 15, fontWeight: '600' },
-  pageCount: { color: Colors.textMuted, fontSize: 14 },
-
-  controls: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: 12,
+  bottom: {
+    backgroundColor: Colors.bg,
+    paddingBottom: 12,
+    paddingTop: 8,
     borderTopWidth: 1,
     borderTopColor: Colors.bgCard,
   },
-  ctrlBtn: {
-    flex: 1,
+  dots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  dotActive: { width: 22 },
+
+  ctrlRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: 14,
+    paddingHorizontal: Spacing.md,
+    gap: 12,
   },
-  ctrlIcon: { fontSize: 22 },
-  ctrlLabel: { fontSize: 15, fontWeight: '700', color: Colors.textSoft },
+  navBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.bgCard,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  navText: { fontSize: 26, color: Colors.text, lineHeight: 30 },
+  disabled: { opacity: 0.25 },
+  readBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  readBtnText: { fontSize: 16, fontWeight: '800', color: '#FFF' },
+  timerText: { fontSize: 18, color: Colors.textSoft },
 
-  modalOverlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
-  modalBox: {
+  overlay: { flex: 1, backgroundColor: '#00000088', justifyContent: 'flex-end' },
+  modal: {
     backgroundColor: Colors.bgCard,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -254,15 +335,31 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   modalTitle: { fontSize: 20, fontWeight: '800', color: Colors.text, textAlign: 'center', marginBottom: 4 },
-  modalSub: { color: Colors.textMuted, textAlign: 'center', marginBottom: Spacing.md, fontSize: 14 },
-  timerOption: {
+  modalSub: { color: Colors.textMuted, textAlign: 'center', marginBottom: Spacing.md },
+  timerOpt: {
     backgroundColor: Colors.bgDeep,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     marginBottom: 10,
   },
-  timerOptionText: { color: Colors.text, fontSize: 17, fontWeight: '600' },
-  cancelBtn: { marginTop: 4, paddingVertical: 12, alignItems: 'center' },
+  timerOptText: { color: Colors.text, fontSize: 17, fontWeight: '600' },
+  cancelBtn: { paddingVertical: 12, alignItems: 'center' },
   cancelText: { color: Colors.accent, fontSize: 16, fontWeight: '600' },
+
+  keywordsBox: {
+    marginTop: Spacing.md,
+    padding: Spacing.md,
+    backgroundColor: Colors.bgDeep,
+    borderRadius: 14,
+  },
+  keywordsTitle: { color: Colors.gold, fontSize: 13, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  keywordsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  keywordChip: {
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+  },
+  keywordText: { fontSize: 14, fontWeight: '700' },
 });

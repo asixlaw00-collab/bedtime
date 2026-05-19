@@ -48,21 +48,21 @@ export default function App() {
         <Tab.Navigator
           screenOptions={{
             headerShown: false,
-            tabBarStyle: { backgroundColor: Colors.bgCard, borderTopColor: Colors.bgDeep, height: 60 },
+            tabBarStyle: { backgroundColor: Colors.bgCard, borderTopColor: Colors.bgDeep, height: 72 },
             tabBarActiveTintColor: Colors.gold,
             tabBarInactiveTintColor: Colors.textMuted,
-            tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginBottom: 4 },
+            tabBarLabelStyle: { fontSize: 13, fontWeight: '700', marginBottom: 6 },
           }}
         >
           <Tab.Screen
             name="HomeTab"
             component={HomeStack}
-            options={{ tabBarLabel: 'Home', tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>🏠</Text> }}
+            options={{ tabBarLabel: 'Home', tabBarIcon: ({ color }) => <Text style={{ fontSize: 32, color }}>🏠</Text> }}
           />
           <Tab.Screen
             name="FavTab"
             component={FavStack}
-            options={{ tabBarLabel: 'Favourites', tabBarIcon: ({ color }) => <Text style={{ fontSize: 22, color }}>♥</Text> }}
+            options={{ tabBarLabel: 'Favourites', tabBarIcon: ({ color }) => <Text style={{ fontSize: 32, color }}>♥</Text> }}
           />
         </Tab.Navigator>
       </NavigationContainer>

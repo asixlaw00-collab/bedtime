@@ -19,7 +19,7 @@ export function StoryCard({ story, onPress, isFav, compact }: Props) {
       <View style={[styles.strip, { backgroundColor: meta.color }]} />
 
       <View style={styles.emojiBox}>
-        <Text style={styles.emoji}>{story.emoji}</Text>
+        <Text style={styles.emoji}>{story.coverEmoji}</Text>
       </View>
 
       <View style={styles.info}>

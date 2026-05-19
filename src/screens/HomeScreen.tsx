@@ -36,7 +36,7 @@ export function HomeScreen({ navigation }: Props) {
           onPress={() => navigation.navigate('Reader', { storyId: featured.id })}
         >
           <Text style={styles.featuredLabel}>✨ Tonight's Story</Text>
-          <Text style={styles.featuredEmoji}>{featured.emoji}</Text>
+          <Text style={styles.featuredEmoji}>{featured.coverEmoji}</Text>
           <Text style={styles.featuredTitle}>{featured.title}</Text>
           <View style={styles.featuredRow}>
             <View style={[styles.badge, { backgroundColor: categoryMeta[featured.category].color + '40' }]}>
@@ -74,7 +74,7 @@ export function HomeScreen({ navigation }: Props) {
             onPress={() => navigation.navigate('Reader', { storyId: story.id })}
           >
             <View style={[styles.listStrip, { backgroundColor: categoryMeta[story.category].color }]} />
-            <Text style={styles.listEmoji}>{story.emoji}</Text>
+            <Text style={styles.listEmoji}>{story.coverEmoji}</Text>
             <View style={{ flex: 1 }}>
               <Text style={styles.listTitle}>{story.title}</Text>
               <Text style={styles.listSub}>{categoryMeta[story.category].label} · {story.readTime} min</Text>
