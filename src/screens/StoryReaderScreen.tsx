@@ -1,8 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Alert, Modal, Dimensions, FlatList, NativeSyntheticEvent,
-  NativeScrollEvent,
+  Alert, Modal, FlatList, NativeSyntheticEvent,
+  NativeScrollEvent, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -40,8 +40,7 @@ import { useBackgroundMusic } from '../hooks/useBackgroundMusic';
 import { Colors, categoryMeta, Spacing } from '../theme';
 import { RootStackParamList } from '../navigation';
 
-const { width: SW, height: SH } = Dimensions.get('window');
-const PAGE_W = SW;
+const IS_TABLET = (w: number) => w >= 768;
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Reader'>;
@@ -55,6 +54,10 @@ export function StoryReaderScreen({ navigation, route }: Props) {
   const [speaking, setSpeaking] = useState(false);
   const [timerModal, setTimerModal] = useState(false);
   const [voice, setVoice] = useState<string | undefined>();
+  const { width: SW, height: SH } = useWindowDimensions();
+  const isTablet = IS_TABLET(SW);
+  const PAGE_W = SW;
+  const ILLUS_H = SH * (isTablet ? 0.62 : 0.56);
 
   useEffect(() => {
     getDisneyVoice().then(setVoice);
@@ -62,7 +65,6 @@ export function StoryReaderScreen({ navigation, route }: Props) {
   const flatRef = useRef<FlatList>(null);
   const meta = categoryMeta[story.category];
   const currentPage = story.pages[pageIdx];
-  const ILLUS_H = SH * 0.56;
 
   useBackgroundMusic(true);
 
@@ -93,13 +95,13 @@ export function StoryReaderScreen({ navigation, route }: Props) {
   }, [speaking, currentPage]);
 
   const onScrollEnd = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / PAGE_W);
+    const idx = Math.round(e.nativeEvent.contentOffset.x / SW);
     if (idx !== pageIdx) {
       Speech.stop();
       setSpeaking(false);
       setPageIdx(idx);
     }
-  }, [pageIdx]);
+  }, [pageIdx, SW]);
 
   const goTo = (idx: number) => {
     Speech.stop();
@@ -144,7 +146,7 @@ export function StoryReaderScreen({ navigation, route }: Props) {
               height={ILLUS_H}
             />
             <View style={styles.textArea}>
-              <Text style={styles.storyText}>{item.text}</Text>
+              <Text style={[styles.storyText, { fontSize: isTablet ? 26 : 18, lineHeight: isTablet ? 40 : 28, paddingHorizontal: isTablet ? 40 : 0 }]}>{item.text}</Text>
 
               {/* keyword strip on last page */}
               {index === story.pages.length - 1 && story.keywords?.length > 0 && (
@@ -276,8 +278,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
   },
   storyText: {
-    fontSize: 18,
-    lineHeight: 28,
     color: Colors.text,
     textAlign: 'center',
     fontWeight: '500',

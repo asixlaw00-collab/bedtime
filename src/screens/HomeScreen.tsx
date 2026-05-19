@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -13,6 +13,8 @@ interface Props {
 }
 
 export function HomeScreen({ navigation }: Props) {
+  const { width } = useWindowDimensions();
+  const isTablet = width >= 768;
   const featured = stories[Math.floor(Math.random() * stories.length)];
 
   return (
@@ -22,10 +24,10 @@ export function HomeScreen({ navigation }: Props) {
 
         {/* header */}
         <View style={styles.header}>
-          <Text style={styles.moon}>🌙</Text>
+          <Text style={[styles.moon, isTablet && { fontSize: 60 }]}>🌙</Text>
           <View>
-            <Text style={styles.title}>Bedtime Stories</Text>
-            <Text style={styles.subtitle}>{stories.length} stories for little dreamers</Text>
+            <Text style={[styles.title, isTablet && { fontSize: 40 }]}>Bedtime Stories</Text>
+            <Text style={[styles.subtitle, isTablet && { fontSize: 18 }]}>{stories.length} stories for little dreamers</Text>
           </View>
         </View>
 
@@ -49,38 +51,40 @@ export function HomeScreen({ navigation }: Props) {
         </TouchableOpacity>
 
         {/* categories */}
-        <Text style={styles.sectionTitle}>Browse by Category</Text>
+        <Text style={[styles.sectionTitle, isTablet && styles.sectionTitleLg]}>Browse by Category</Text>
         <View style={styles.catGrid}>
           {Object.entries(categoryMeta).map(([key, meta]) => (
             <TouchableOpacity
               key={key}
-              style={[styles.catCard, { backgroundColor: meta.color + '22', borderColor: meta.color + '55' }]}
+              style={[styles.catCard, isTablet && styles.catCardLg, { backgroundColor: meta.color + '22', borderColor: meta.color + '55' }]}
               activeOpacity={0.8}
               onPress={() => navigation.navigate('StoryList', { category: key as any, title: meta.label })}
             >
-              <Text style={styles.catEmoji}>{meta.emoji}</Text>
-              <Text style={[styles.catLabel, { color: meta.color }]}>{meta.label}</Text>
+              <Text style={[styles.catEmoji, isTablet && styles.catEmojiLg]}>{meta.emoji}</Text>
+              <Text style={[styles.catLabel, isTablet && styles.catLabelLg, { color: meta.color }]}>{meta.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
         {/* all stories */}
-        <Text style={styles.sectionTitle}>All Stories</Text>
-        {stories.map((story) => (
-          <TouchableOpacity
-            key={story.id}
-            style={styles.listItem}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('Reader', { storyId: story.id })}
-          >
-            <View style={[styles.listStrip, { backgroundColor: categoryMeta[story.category].color }]} />
-            <Text style={styles.listEmoji}>{story.coverEmoji}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.listTitle}>{story.title}</Text>
-              <Text style={styles.listSub}>{categoryMeta[story.category].label} · {story.readTime} min</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
+        <Text style={[styles.sectionTitle, isTablet && styles.sectionTitleLg]}>All Stories</Text>
+        <View style={isTablet ? styles.twoCol : undefined}>
+          {stories.map((story) => (
+            <TouchableOpacity
+              key={story.id}
+              style={[styles.listItem, isTablet && styles.listItemLg]}
+              activeOpacity={0.8}
+              onPress={() => navigation.navigate('Reader', { storyId: story.id })}
+            >
+              <View style={[styles.listStrip, { backgroundColor: categoryMeta[story.category].color }]} />
+              <Text style={[styles.listEmoji, isTablet && styles.listEmojiLg]}>{story.coverEmoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.listTitle, isTablet && styles.listTitleLg]}>{story.title}</Text>
+                <Text style={[styles.listSub, isTablet && styles.listSubLg]}>{categoryMeta[story.category].label} · {story.readTime} min</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -114,6 +118,7 @@ const styles = StyleSheet.create({
   featuredTime: { fontSize: 12, color: Colors.textMuted },
 
   sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.text, marginBottom: Spacing.sm, marginTop: 4 },
+  sectionTitleLg: { fontSize: 26 },
 
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: Spacing.lg },
   catCard: {
@@ -124,9 +129,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
   },
+  catCardLg: { width: '22%', borderRadius: 20 },
   catEmoji: { fontSize: 30, marginBottom: 4 },
+  catEmojiLg: { fontSize: 48, marginBottom: 8 },
   catLabel: { fontSize: 12, fontWeight: '700' },
+  catLabelLg: { fontSize: 16 },
 
+  twoCol: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -136,8 +145,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     minHeight: 70,
   },
+  listItemLg: { width: '49%', minHeight: 90, marginBottom: 0, borderRadius: 18 },
   listStrip: { width: 4, alignSelf: 'stretch' },
   listEmoji: { fontSize: 32, width: 60, textAlign: 'center' },
+  listEmojiLg: { fontSize: 44, width: 80 },
   listTitle: { fontSize: 15, fontWeight: '600', color: Colors.text },
+  listTitleLg: { fontSize: 20 },
   listSub: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
+  listSubLg: { fontSize: 15, marginTop: 4 },
 });
